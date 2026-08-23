@@ -8,14 +8,12 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/YOUR_GITHUB_USERNAME/RagUi/actions/workflows/ci.yml"><img src="https://github.com/YOUR_GITHUB_USERNAME/RagUi/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/omersx/RagUi/actions/workflows/ci.yml"><img src="https://github.com/omersx/RagUi/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" alt="Python 3.12" />
   <img src="https://img.shields.io/badge/Next.js-14-black?logo=next.js" alt="Next.js 14" />
   <img src="https://img.shields.io/badge/PostgreSQL-16%20%2B%20pgvector-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL 16 + pgvector" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT" /></a>
 </p>
-
-> Replace `YOUR_GITHUB_USERNAME` in the CI badge above after pushing.
 
 RagUi parses your documents (PDF, DOCX, HTML, PPTX, MD) with [Docling](https://github.com/DS4SD/docling), chunks them contextually, embeds them into PostgreSQL + `pgvector`, and answers questions by fusing keyword and semantic retrieval — streaming grounded answers over Server-Sent Events with source citations. Runs fully local (Ollama / SentenceTransformers) or with any OpenAI-compatible API.
 
