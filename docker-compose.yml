@@ -1,0 +1,33 @@
+# Development: Postgres only (+ optional pgadmin). Run frontend/backend natively.
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: ragui_db_dev
+    environment:
+      POSTGRES_DB: ragui
+      POSTGRES_USER: ragui
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-ragui_dev}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata_dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ragui"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: ragui_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@ragui.local
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - db
+    profiles: ["tools"]
+
+volumes:
+  pgdata_dev:

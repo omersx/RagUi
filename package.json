@@ -1,0 +1,21 @@
+{
+  "name": "ragui",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ragui — full-stack RAG app (one command to develop)",
+  "scripts": {
+    "dev": "concurrently --kill-others-on-fail -c yellow,blue,magenta -n db,backend,web \"npm run dev:db\" \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:db": "docker compose up -d db",
+    "dev:backend": "node scripts/run-backend.mjs",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "setup": "node scripts/setup.mjs",
+    "typecheck": "npm run typecheck --prefix frontend",
+    "test:backend": "cd backend && .venv\\Scripts\\python.exe -m pytest tests -q",
+    "prod:up": "docker compose -f docker-compose.prod.yml --env-file .env up -d --build",
+    "prod:down": "docker compose -f docker-compose.prod.yml down",
+    "prod:logs": "docker compose -f docker-compose.prod.yml logs -f"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
