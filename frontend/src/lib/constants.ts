@@ -21,6 +21,12 @@ export const RETRIEVAL_MODES: {
     label: "Keyword (BM25)",
     description: "Postgres full-text search only — exact word matches, no embeddings.",
   },
+  {
+    value: "graph",
+    label: "Graph",
+    description:
+      "Entity-anchored walk over extracted relations (1–2 hops) — best for multi-hop questions. Needs extracted entities; falls back to hybrid.",
+  },
 ];
 
 export const LOCAL_EMBEDDING_MODELS = [

@@ -8,9 +8,12 @@ interface ChatState {
   isStreaming: boolean;
   /** Set by HistoryPanel to request loading a past session into the chat view */
   loadRequest: { id: string; title: string } | null;
+  /** Set by KnowledgeGraph ("Ask chat about this chunk") — auto-sent by ChatView */
+  pendingPrompt: string | null;
 
   setSessionId: (id: string | null) => void;
   setTitle: (t: string) => void;
+  setPendingPrompt: (p: string | null) => void;
   addMessage: (msg: Omit<Message, "id" | "createdAt">) => Message;
   appendToLastAssistant: (token: string) => void;
   attachSources: (sources: ChunkSource[]) => void;
@@ -29,6 +32,7 @@ export const useChatStore = create<ChatState>((set) => ({
   messages: [],
   isStreaming: false,
   loadRequest: null,
+  pendingPrompt: null,
 
   setSessionId: (id) => set({ sessionId: id }),
   setTitle: (t) => set({ title: t }),
@@ -71,4 +75,5 @@ export const useChatStore = create<ChatState>((set) => ({
 
   requestLoad: (req) => set({ loadRequest: req }),
   clearLoadRequest: () => set({ loadRequest: null }),
+  setPendingPrompt: (p) => set({ pendingPrompt: p }),
 }));

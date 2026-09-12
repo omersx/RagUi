@@ -4,6 +4,7 @@ import { useState } from "react";
 import { AlertTriangle, ArrowRight, Eye, Loader2 } from "lucide-react";
 import DropZone from "./DropZone";
 import DoclingPreview from "./DoclingPreview";
+import Toggle from "@/components/ui/Toggle";
 import { useConfigStore } from "@/stores/configStore";
 import { useViewStore } from "@/stores/viewStore";
 import { uploadFile } from "@/lib/api";
@@ -22,6 +23,9 @@ export default function UploadView() {
   const payload = useConfigStore((s) => s.payload);
   const ocrEnabled = useConfigStore((s) => s.ocrEnabled);
   const embeddingModel = useConfigStore((s) => s.embeddingModel);
+  const llmModel = useConfigStore((s) => s.llmModel);
+  const extractEntities = useConfigStore((s) => s.extractEntities);
+  const setExtractEntities = useConfigStore((s) => s.setExtractEntities);
   const setActiveView = useViewStore((s) => s.setActiveView);
 
   const busy = stage === "busy";
@@ -47,6 +51,7 @@ export default function UploadView() {
         file,
         config: payload(),
         ocrEnabled,
+        extractEntities,
         onProgress: (p) => {
           setProgress(p);
           if (p >= 100) {
@@ -58,6 +63,9 @@ export default function UploadView() {
       setResult(res);
       setStage("done");
       toast("success", `Ingested "${res.filename}" — ${res.total_chunks} chunks embedded.`);
+      if (res.entity_extraction === "started") {
+        toast("info", "Entity extraction running in the background — check the Knowledge Base soon.");
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Upload failed.";
       if (msg.startsWith("Duplicate")) {
@@ -84,6 +92,26 @@ export default function UploadView() {
 
       {stage !== "done" && (
         <DropZone disabled={busy} onFileSelected={handleFile} />
+      )}
+
+      {/* Extraction options */}
+      {stage !== "done" && (
+        <div className="mt-4 flex items-start gap-3 rounded-xl border border-zinc-900 bg-zinc-900/40 px-4 py-3.5">
+          <Toggle
+            checked={extractEntities}
+            onChange={setExtractEntities}
+            disabled={busy}
+            label="Extract entities and relations"
+          />
+          <div>
+            <p className="text-[13px] font-medium text-zinc-200">Extract knowledge graph</p>
+            <p className="mt-0.5 text-xs leading-relaxed text-zinc-500">
+              Finds people, organizations, concepts and their relations with{" "}
+              <span className="font-mono text-zinc-400">{llmModel}</span> after ingest.
+              Runs in the background; uses extra LLM calls.
+            </p>
+          </div>
+        </div>
       )}
 
       {/* Progress */}

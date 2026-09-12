@@ -23,6 +23,10 @@ def test_all_api_routes_registered():
         "/api/health",
         "/api/ingest",
         "/api/knowledge/files",
+        "/api/knowledge/files/{file_id}",
+        "/api/knowledge/files/{file_id}/extract-entities",
+        "/api/knowledge/entities",
+        "/api/knowledge/graph",
         "/api/knowledge/stats",
         "/api/sessions",
         "/api/sessions/{session_id}",
@@ -30,6 +34,23 @@ def test_all_api_routes_registered():
         "/api/test-key",
     }
     assert expected.issubset(paths)
+
+
+def test_graph_route_accepts_filter_params():
+    import inspect
+
+    from app.routers.knowledge import graph
+
+    params = set(inspect.signature(graph).parameters)
+    assert {"model", "limit", "neighbors", "min_similarity", "file_id", "strategy", "layer"} <= params
+
+
+def test_graph_cache_invalidation_hook():
+    from app.routers.knowledge import _graph_cache, invalidate_graph_cache
+
+    _graph_cache[("x",)] = (0.0, {})
+    invalidate_graph_cache()
+    assert _graph_cache == {}
 
 
 @pytest.mark.parametrize(
@@ -114,6 +135,9 @@ def test_chat_config_defaults_and_bounds():
     assert cfg.temperature == 0.7
     assert cfg.embedding_model == "all-MiniLM-L6-v2"
     assert cfg.llm_provider == "local"
+    assert cfg.retrieval_mode == "hybrid"
+    assert cfg.graph_depth == 2
+    assert cfg.graph_max_entities == 6
 
     with pytest.raises(ValidationError):
         ChatConfig(top_k=999)

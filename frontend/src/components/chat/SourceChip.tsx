@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { FileText } from "lucide-react";
+import { FileText, Waypoints } from "lucide-react";
 import Modal from "@/components/ui/Modal";
+import { useGraphStore } from "@/stores/graphStore";
+import { useViewStore } from "@/stores/viewStore";
 import type { ChunkSource } from "@/types";
 
 interface SourceChipProps {
@@ -12,6 +14,14 @@ interface SourceChipProps {
 
 export default function SourceChip({ index, source }: SourceChipProps) {
   const [open, setOpen] = useState(false);
+  const focusNode = useGraphStore((s) => s.focusNode);
+  const setActiveView = useViewStore((s) => s.setActiveView);
+
+  const viewInGraph = () => {
+    setOpen(false);
+    focusNode(`c${source.id}`);
+    setActiveView("knowledge");
+  };
 
   const pages = source.page_range?.length
     ? source.page_range.length > 1
@@ -52,6 +62,12 @@ export default function SourceChip({ index, source }: SourceChipProps) {
           <div className="rounded-xl bg-zinc-950 p-4 text-[13px] leading-relaxed text-zinc-300 whitespace-pre-wrap">
             {source.content}
           </div>
+          <button
+            onClick={viewInGraph}
+            className="flex items-center gap-1.5 rounded-lg border border-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-400 transition-colors hover:border-teal-900/60 hover:text-teal-300"
+          >
+            <Waypoints size={13} /> View chunk in knowledge graph
+          </button>
         </div>
       </Modal>
     </>

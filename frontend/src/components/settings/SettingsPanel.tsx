@@ -565,6 +565,37 @@ export default function SettingsPanel() {
             paraphrases won&apos;t be found.
           </p>
         )}
+
+        {cfg.retrievalMode === "graph" && (
+          <div className="space-y-3 rounded-xl bg-zinc-950/60 p-3.5 animate-fade-in">
+            <p className="text-[10.5px] leading-relaxed text-zinc-500">
+              Matches entities named in your question, walks their relations, and grounds the
+              answer in those chunks. Requires extracted entities — otherwise it falls back to
+              hybrid automatically.
+            </p>
+            {health?.entities && (health.entities.running > 0 || health.entities.queued > 0 || health.entities.processing > 0) && (
+              <p className="text-[10.5px] text-amber-400/90">
+                Background extractions: {health.entities.running} running ·{" "}
+                {health.entities.queued} queued · {health.entities.processing} active in DB.
+              </p>
+            )}
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-zinc-400">Hop depth</span>
+              <div className="flex rounded-lg border border-zinc-800 bg-zinc-950 p-0.5 text-[11px]">
+                {[1, 2].map((d) => (
+                  <button
+                    key={d}
+                    onClick={() => cfg.setGraphDepth(d)}
+                    className={`rounded-md px-2.5 py-1 font-medium transition-colors ${cfg.graphDepth === d ? "bg-zinc-800 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"}`}
+                    title={d === 1 ? "Direct relations only" : "Relations of relations too"}
+                  >
+                    {d} hop{d === 2 ? "s" : ""}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </Section>
 
       {/* Advanced */}

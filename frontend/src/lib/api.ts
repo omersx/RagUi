@@ -1,9 +1,11 @@
 import { useConfigStore } from "@/stores/configStore";
 import type {
   ChatConfigPayload,
+  EntityRecord,
   FileRecord,
   HealthStatus,
   IngestResult,
+  KnowledgeGraph,
   KnowledgeStats,
   SessionSummary,
   SSEEvent,
@@ -69,6 +71,49 @@ export async function deleteKnowledgeFile(fileId: number): Promise<{ chunks_remo
   return json(await fetch(url(`/api/knowledge/files/${fileId}`), { method: "DELETE", headers: authHeaders() }));
 }
 
+export async function getEntities(params: { fileId?: number; q?: string; type?: string; limit?: number } = {}): Promise<EntityRecord[]> {
+  const p = new URLSearchParams();
+  if (params.fileId) p.set("file_id", String(params.fileId));
+  if (params.q) p.set("q", params.q);
+  if (params.type) p.set("type", params.type);
+  if (params.limit) p.set("limit", String(params.limit));
+  const qs = p.toString() ? `?${p}` : "";
+  return json(await fetch(url(`/api/knowledge/entities${qs}`), { cache: "no-store", headers: authHeaders() }));
+}
+
+export async function triggerExtraction(fileId: number, config: ChatConfigPayload): Promise<{ status: string }> {
+  return json(
+    await fetch(url(`/api/knowledge/files/${fileId}/extract-entities`), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify(config),
+    })
+  );
+}
+
+export interface GraphQuery {
+  model?: string;
+  limit?: number;
+  neighbors?: number;
+  minSimilarity?: number;
+  fileId?: number | null;
+  strategy?: "balanced" | "recent";
+  layer?: "chunks" | "entities" | "both";
+}
+
+export async function getKnowledgeGraph(q: GraphQuery = {}): Promise<KnowledgeGraph> {
+  const params = new URLSearchParams();
+  if (q.model) params.set("model", q.model);
+  if (q.limit) params.set("limit", String(q.limit));
+  if (q.neighbors !== undefined) params.set("neighbors", String(q.neighbors));
+  if (q.minSimilarity !== undefined) params.set("min_similarity", String(q.minSimilarity));
+  if (q.fileId) params.set("file_id", String(q.fileId));
+  if (q.strategy) params.set("strategy", q.strategy);
+  if (q.layer) params.set("layer", q.layer);
+  const qs = params.toString() ? `?${params}` : "";
+  return json(await fetch(url(`/api/knowledge/graph${qs}`), { cache: "no-store", headers: authHeaders() }));
+}
+
 // ---------- Sessions ----------
 
 export async function getSessions(): Promise<SessionSummary[]> {
@@ -94,10 +139,11 @@ export interface UploadOptions {
   file: File;
   config: ChatConfigPayload;
   ocrEnabled: boolean;
+  extractEntities?: boolean;
   onProgress?: (percent: number) => void;
 }
 
-export function uploadFile({ file, config, ocrEnabled, onProgress }: UploadOptions): Promise<IngestResult> {
+export function uploadFile({ file, config, ocrEnabled, extractEntities, onProgress }: UploadOptions): Promise<IngestResult> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     const form = new FormData();
@@ -109,6 +155,10 @@ export function uploadFile({ file, config, ocrEnabled, onProgress }: UploadOptio
     form.append("api_key", config.api_key ?? "");
     form.append("ocr_enabled", String(ocrEnabled));
     form.append("max_tokens", "512");
+    form.append("extract_entities", String(!!extractEntities));
+    form.append("llm_provider", config.llm_provider);
+    form.append("llm_model", config.llm_model);
+    form.append("llm_base_url", config.llm_base_url ?? "");
 
     xhr.upload.addEventListener("progress", (e) => {
       if (e.lengthComputable && onProgress) {

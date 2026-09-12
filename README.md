@@ -40,20 +40,27 @@ RagUi parses your documents (PDF, DOCX, HTML, PPTX, MD) with [Docling](https://g
 - 📄 Docling parsing — tables, layout awareness, optional OCR for scanned PDFs
 - ✂️ Contextual chunking via Docling's HybridChunker (heading hierarchy + page ranges preserved)
 - 🔒 SHA-256 deduplication — re-uploads return HTTP 409
+- 🕸️ Opt-in entity extraction — LLM finds people, organizations, concepts and their relations as a background job (durable queue: survives restarts, atomic multi-worker claims, retries with backoff, keys never stored)
 
 **Retrieval & generation**
 - 🔀 Dynamic model switching — local or API models for embedding *and* generation, independently, no restarts
 - 🌐 Any OpenAI-compatible provider per slot — OpenRouter, Groq, DeepSeek, Mistral, Together, LM Studio, …
 - 🧠 Per-model vector tables — auto-created, dimension-probed, injection-safe naming
 - 🔎 Hybrid search — Postgres `tsvector` (BM25-style) + pgvector cosine similarity fused with Reciprocal Rank Fusion; weights tunable live
+- 🕸️ GraphRAG mode — matches entities named in your question, walks 1–2 relation hops, grounds answers in those chunks (hybrid fallback)
 - ⚡ Streaming chat — SSE with sources delivered before tokens, session auto-titling
 
+**Knowledge graph**
+- 📊 Interactive 2D graph (d3-force) — file → chunk structure plus embedding-similarity links, with zoom/pan/drag, search, and model/file filters
+- 🧩 Entity layer — canonical entity nodes colored by type, labeled relation edges, mention links into chunks; layer toggle (chunks / entities / both)
+- 🔗 Graph ↔ chat linking — ask chat about any chunk or entity; cited chunks highlight in the graph; jump from a source chip to its graph node
+
 **Application**
-- 📚 Knowledge dashboard — file/chunk/storage stats, per-model usage, cascading deletes
+- 📚 Knowledge dashboard — file/chunk/storage stats, per-file entity status (queued / extracting / counts), per-model usage, cascading deletes
 - 🕘 Persistent history — sessions grouped by date, resume any conversation
-- ⚙️ Settings UI — provider pickers, key tester, retrieval tuning, live service status
+- ⚙️ Settings UI — provider pickers, key tester, retrieval tuning (incl. GraphRAG hop depth), live service status with extraction-queue counts
 - 📱 Responsive UI — desktop icon rail collapses to a mobile bottom tab bar
-- 🛡️ Production hardening — optional bearer-token auth, rate limiting, non-root containers, security headers
+- 🛡️ Production hardening — optional bearer-token auth, rate limiting (incl. a separate cap for the graph endpoint), non-root containers, security headers
 
 ## Architecture
 
@@ -177,6 +184,9 @@ All configuration is environment-driven — copy `.env.example` to `.env` (root,
 | `ALLOWED_ORIGINS` | `http://localhost:3000` | CORS allowlist |
 | `API_AUTH_TOKEN` | *(empty)* | Shared bearer token protecting every route except `/api/health`. Empty = auth off |
 | `RATE_LIMIT_PER_MINUTE` | `120` | Per-IP cap on mutating `/api` requests (`0` disables) |
+| `RATE_LIMIT_GRAPH_PER_MINUTE` | `30` | Per-IP cap on the expensive `GET /knowledge/graph` vector search (`0` disables) |
+| `ENTITY_MAX_CONCURRENCY` | `2` | Max simultaneous background entity-extraction files |
+| `ENTITY_MAX_RETRIES` | `3` | Per-batch LLM retries with exponential backoff before a batch is skipped |
 | `BACKEND_BIND` | `127.0.0.1` | Host interface for port 8000 |
 | `FRONTEND_BIND` | `127.0.0.1` | Host interface for port 3000 |
 | `WEB_CONCURRENCY` | `1` | uvicorn workers (each keeps its own model copies in RAM) |
@@ -207,6 +217,9 @@ Base path: `/api` · Interactive docs at `http://localhost:8000/docs` (disabled 
 | POST | `/chat` | SSE stream: `session` → `sources` → `token…` → `title` → `done` |
 | POST | `/test-key` | Validate an OpenAI-compatible API key |
 | GET | `/knowledge/stats` | Aggregate stats across all model tables |
+| GET | `/knowledge/graph` | 2D graph data: file → chunk nodes + semantic links, or entity nodes + relations (`model`, `limit`, `neighbors`, `min_similarity`, `file_id`, `strategy`, `layer=chunks\|entities\|both`) |
+| GET | `/knowledge/entities` | Canonical entities with mention/file counts (`file_id`, `q`, `type`, `limit`) |
+| POST | `/knowledge/files/{id}/extract-entities` | Run LLM entity/relation extraction in the background (ChatConfig body) |
 | GET | `/knowledge/files` | List indexed files |
 | DELETE | `/knowledge/files/{id}` | Delete file + cascade chunks |
 | GET | `/sessions` | List chat sessions |

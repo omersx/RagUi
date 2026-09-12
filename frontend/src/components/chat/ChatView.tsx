@@ -19,8 +19,10 @@ export default function ChatView() {
     messages,
     isStreaming,
     loadRequest,
+    pendingPrompt,
     setSessionId,
     setTitle,
+    setPendingPrompt,
     addMessage,
     appendToLastAssistant,
     attachSources,
@@ -144,6 +146,15 @@ export default function ChatView() {
 
   const handleStop = () => abortRef.current?.abort();
 
+  // ---- Graph handoff ("Ask chat about this chunk") ----
+  useEffect(() => {
+    if (!pendingPrompt || isStreaming) return;
+    const prompt = pendingPrompt;
+    setPendingPrompt(null);
+    handleSend(prompt);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingPrompt]);
+
   return (
     <div className="flex h-dvh flex-1 flex-col bg-zinc-950 pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0">
       {/* Header */}
@@ -165,8 +176,8 @@ export default function ChatView() {
             {llmModel}
           </span>
           <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-800 bg-zinc-900 px-2.5 py-1 text-[10.5px] font-medium text-zinc-400">
-            <Search size={10} className={retrievalMode === "fulltext" ? "text-amber-400" : "text-emerald-400"} />
-            {retrievalMode === "hybrid" ? "hybrid" : retrievalMode === "fulltext" ? "keyword" : "semantic"}
+            <Search size={10} className={retrievalMode === "fulltext" ? "text-amber-400" : retrievalMode === "graph" ? "text-violet-400" : "text-emerald-400"} />
+            {retrievalMode === "hybrid" ? "hybrid" : retrievalMode === "fulltext" ? "keyword" : retrievalMode === "graph" ? "graph" : "semantic"}
           </span>
           <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-800 bg-zinc-900 px-2.5 py-1 text-[10.5px] font-medium text-zinc-400">
             <Database size={10} className="text-zinc-500" />

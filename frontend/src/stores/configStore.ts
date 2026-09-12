@@ -17,10 +17,12 @@ interface ConfigState {
   temperature: number;
   maxTokens: number;
   ocrEnabled: boolean;
+  extractEntities: boolean;
   retrievalMode: RetrievalMode;
   fulltextWeight: number;
   semanticWeight: number;
   rrfK: number;
+  graphDepth: number;
 
   setAuthToken: (t: string) => void;
   setLlmProvider: (p: Provider) => void;
@@ -36,10 +38,12 @@ interface ConfigState {
   setTemperature: (n: number) => void;
   setMaxTokens: (n: number) => void;
   setOcrEnabled: (b: boolean) => void;
+  setExtractEntities: (b: boolean) => void;
   setRetrievalMode: (m: RetrievalMode) => void;
   setFulltextWeight: (n: number) => void;
   setSemanticWeight: (n: number) => void;
   setRrfK: (n: number) => void;
+  setGraphDepth: (n: number) => void;
 
   payload: () => ChatConfigPayload;
 }
@@ -76,10 +80,12 @@ export const useConfigStore = create<ConfigState>()(
       temperature: 0.7,
       maxTokens: 2048,
       ocrEnabled: false,
+      extractEntities: false,
       retrievalMode: "hybrid",
       fulltextWeight: 1.0,
       semanticWeight: 1.0,
       rrfK: 50,
+      graphDepth: 2,
 
       setAuthToken: (t) => set({ authToken: t }),
       setLlmProvider: (p) =>
@@ -112,10 +118,12 @@ export const useConfigStore = create<ConfigState>()(
       setTemperature: (n) => set({ temperature: n }),
       setMaxTokens: (n) => set({ maxTokens: n }),
       setOcrEnabled: (b) => set({ ocrEnabled: b }),
+      setExtractEntities: (b) => set({ extractEntities: b }),
       setRetrievalMode: (m) => set({ retrievalMode: m }),
       setFulltextWeight: (n) => set({ fulltextWeight: n }),
       setSemanticWeight: (n) => set({ semanticWeight: n }),
       setRrfK: (n) => set({ rrfK: n }),
+      setGraphDepth: (n) => set({ graphDepth: n }),
 
       payload: () => {
         const s = get();
@@ -135,12 +143,14 @@ export const useConfigStore = create<ConfigState>()(
           fulltext_weight: s.fulltextWeight,
           semantic_weight: s.semanticWeight,
           rrf_k: s.rrfK,
+          graph_depth: s.graphDepth,
+          graph_max_entities: 6,
         };
       },
     }),
     {
       name: "ragui-config",
-      version: 4,
+      version: 6,
       migrate: (persisted, version) => {
         const state = persisted as Partial<ConfigState>;
         if (version < 2) {
@@ -161,6 +171,12 @@ export const useConfigStore = create<ConfigState>()(
         }
         if (version < 4) {
           Object.assign(state, { authToken: "" });
+        }
+        if (version < 5) {
+          Object.assign(state, { extractEntities: false });
+        }
+        if (version < 6) {
+          Object.assign(state, { graphDepth: 2 });
         }
         return state as ConfigState;
       },

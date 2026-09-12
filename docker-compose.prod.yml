@@ -35,7 +35,11 @@ services:
       # Shared bearer token for the API (empty = no auth). Set this in prod.
       API_AUTH_TOKEN: ${API_AUTH_TOKEN:-}
       RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-120}
+      RATE_LIMIT_GRAPH_PER_MINUTE: ${RATE_LIMIT_GRAPH_PER_MINUTE:-30}
+      ENTITY_MAX_CONCURRENCY: ${ENTITY_MAX_CONCURRENCY:-2}
+      ENTITY_MAX_RETRIES: ${ENTITY_MAX_RETRIES:-3}
       # Each worker keeps its own model copies in memory — use 1 on small hosts.
+      # Extraction jobs are claimed atomically from the DB, so >1 is safe for them.
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-1}
     extra_hosts:
       - "host.docker.internal:host-gateway"

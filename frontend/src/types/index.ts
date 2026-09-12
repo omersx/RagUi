@@ -1,6 +1,6 @@
 export type Provider = "local" | "api" | "custom";
 
-export type RetrievalMode = "semantic" | "hybrid" | "fulltext";
+export type RetrievalMode = "semantic" | "hybrid" | "fulltext" | "graph";
 
 export interface ChatConfigPayload {
   llm_provider: Provider;
@@ -18,6 +18,8 @@ export interface ChatConfigPayload {
   fulltext_weight: number;
   semantic_weight: number;
   rrf_k: number;
+  graph_depth: number;
+  graph_max_entities: number;
 }
 
 export interface ChunkSource {
@@ -73,6 +75,10 @@ export interface FileRecord {
   mime_type?: string | null;
   error_message?: string | null;
   created_at: string;
+  entity_status?: "skipped" | "queued" | "processing" | "completed" | "failed";
+  entity_error?: string | null;
+  entity_count?: number;
+  relation_count?: number;
 }
 
 export interface ModelUsage {
@@ -88,12 +94,51 @@ export interface KnowledgeStats {
   total_storage_mb: number;
 }
 
+export interface GraphNode {
+  id: string;
+  type: "file" | "chunk" | "entity";
+  label: string;
+  file_id?: number;
+  filename?: string;
+  preview?: string;
+  headings?: string[];
+  token_count?: number | null;
+  chunk_count?: number;
+  entity_type?: string;
+  mention_count?: number;
+}
+
+export interface GraphEdge {
+  source: string;
+  target: string;
+  kind: "contains" | "similar" | "relates" | "mentions";
+  weight?: number;
+  label?: string;
+}
+
+export type GraphLayer = "chunks" | "entities" | "both";
+
+export interface KnowledgeGraph {
+  model: string | null;
+  models_available: string[];
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  total_chunks: number;
+  returned_chunks: number;
+  truncated: boolean;
+  strategy?: string;
+  layer?: GraphLayer;
+  total_entities?: number;
+  returned_entities?: number;
+}
+
 export interface HealthStatus {
   status: string;
   database: string;
   ollama: "available" | "unavailable";
   ollama_models?: string[];
   loaded_models?: string[];
+  entities?: { running: number; queued: number; processing: number };
 }
 
 export interface IngestResult {
@@ -105,6 +150,15 @@ export interface IngestResult {
   total_chunks: number;
   embedding_model: string;
   processing_time_seconds: number;
+  entity_extraction?: "started" | "skipped";
+}
+
+export interface EntityRecord {
+  id: number;
+  name: string;
+  type: string;
+  mention_count: number;
+  file_count: number;
 }
 
 export interface UploadStage {

@@ -8,6 +8,7 @@ from ..config import get_settings
 from ..database import pool
 from ..models.schemas import TestKeyRequest
 from ..services.embedder import loaded_local_models
+from ..services.entities import queue_depth
 
 router = APIRouter()
 
@@ -40,6 +41,7 @@ async def health():
         "ollama": ollama,
         "ollama_models": available_models,
         "loaded_models": loaded_local_models(),
+        "entities": await queue_depth(),
     }
 
 

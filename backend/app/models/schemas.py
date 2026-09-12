@@ -20,11 +20,15 @@ class ChatConfig(BaseModel):
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     max_tokens: int = Field(default=2048, ge=64, le=8192)
     # Retrieval mode: semantic (vector only), fulltext (keyword/BM25-style),
-    # or hybrid (both lists fused with Reciprocal Rank Fusion).
-    retrieval_mode: Literal["semantic", "hybrid", "fulltext"] = "hybrid"
+    # hybrid (both lists fused with Reciprocal Rank Fusion), or graph
+    # (entity-anchored hop walk with hybrid fallback — needs extracted entities).
+    retrieval_mode: Literal["semantic", "hybrid", "fulltext", "graph"] = "hybrid"
     fulltext_weight: float = Field(default=1.0, ge=0.0, le=10.0)
     semantic_weight: float = Field(default=1.0, ge=0.0, le=10.0)
     rrf_k: int = Field(default=50, ge=1, le=1000)
+    # GraphRAG: hop depth over the entity graph + max query-entity anchors.
+    graph_depth: int = Field(default=2, ge=1, le=2)
+    graph_max_entities: int = Field(default=6, ge=1, le=20)
 
     @property
     def llm_key(self) -> str:

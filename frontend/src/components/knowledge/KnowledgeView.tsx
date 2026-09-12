@@ -6,12 +6,18 @@ import {
   FileText,
   HardDrive,
   Layers,
+  List,
   RefreshCw,
+  Sparkles,
   Trash2,
+  Waypoints,
 } from "lucide-react";
 import Modal from "@/components/ui/Modal";
 import Spinner from "@/components/ui/Spinner";
-import { deleteKnowledgeFile, getKnowledgeFiles, getKnowledgeStats } from "@/lib/api";
+import KnowledgeGraph from "@/components/knowledge/KnowledgeGraph";
+import { useGraphStore } from "@/stores/graphStore";
+import { useConfigStore } from "@/stores/configStore";
+import { deleteKnowledgeFile, getKnowledgeFiles, getKnowledgeStats, triggerExtraction } from "@/lib/api";
 import { toast } from "@/stores/toastStore";
 import type { FileRecord, KnowledgeStats } from "@/types";
 
@@ -43,12 +49,76 @@ const STATUS_STYLES: Record<string, string> = {
   failed: "bg-red-950/40 text-red-400 border-red-900/60",
 };
 
+function EntityCell({
+  file,
+  extracting,
+  onExtract,
+}: {
+  file: FileRecord;
+  extracting: boolean;
+  onExtract: () => void;
+}) {
+  const status = file.entity_status ?? "skipped";
+  if (status === "completed") {
+    return (
+      <span
+        className="text-xs text-zinc-400"
+        title={`${file.entity_count ?? 0} entities, ${file.relation_count ?? 0} relations`}
+      >
+        ⬡ {file.entity_count ?? 0} · {file.relation_count ?? 0} rel
+      </span>
+    );
+  }
+  if (status === "processing" || extracting) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-[11px] text-amber-400">
+        <Spinner size={11} /> extracting…
+      </span>
+    );
+  }
+  if (status === "queued") {
+    return <span className="text-[11px] text-amber-400/70">queued…</span>;
+  }
+  if (status === "failed") {
+    return (
+      <span className="inline-flex items-center gap-2">
+        <span className="text-[11px] text-red-400" title={file.entity_error ?? "Extraction failed"}>
+          failed
+        </span>
+        {file.status === "completed" && (
+          <button
+            onClick={onExtract}
+            className="rounded-md border border-zinc-800 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400 hover:border-zinc-600 hover:text-zinc-200"
+          >
+            Retry
+          </button>
+        )}
+      </span>
+    );
+  }
+  // skipped — offer manual extraction for ingested files
+  if (file.status !== "completed") return <span className="text-xs text-zinc-700">—</span>;
+  return (
+    <button
+      onClick={onExtract}
+      title="Extract entities & relations with the current chat model"
+      className="inline-flex items-center gap-1 rounded-md border border-zinc-800 px-1.5 py-0.5 text-[10px] font-medium text-zinc-500 transition-colors hover:border-teal-900/60 hover:text-teal-300"
+    >
+      <Sparkles size={10} /> Extract
+    </button>
+  );
+}
+
 export default function KnowledgeView() {
   const [stats, setStats] = useState<KnowledgeStats | null>(null);
   const [files, setFiles] = useState<FileRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const tab = useGraphStore((s) => s.tab);
+  const setTab = useGraphStore((s) => s.setTab);
   const [confirmDelete, setConfirmDelete] = useState<FileRecord | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [extractingIds, setExtractingIds] = useState<Set<number>>(new Set());
+  const configPayload = useConfigStore((s) => s.payload);
 
   const refresh = useCallback(async () => {
     try {
@@ -69,6 +139,27 @@ export default function KnowledgeView() {
     refresh();
   }, [refresh]);
 
+  const onExtract = async (f: FileRecord) => {
+    setExtractingIds((s) => new Set(s).add(f.id));
+    try {
+      const res = await triggerExtraction(f.id, configPayload());
+      if (res.status === "already_running") {
+        toast("info", `Extraction already running for "${f.filename}".`);
+      } else {
+        toast("success", `Entity extraction started for "${f.filename}".`);
+      }
+      await refresh();
+    } catch (err) {
+      toast("error", err instanceof Error ? err.message : "Extraction failed to start.");
+    } finally {
+      setExtractingIds((s) => {
+        const next = new Set(s);
+        next.delete(f.id);
+        return next;
+      });
+    }
+  };
+
   const onDelete = async () => {
     if (!confirmDelete) return;
     setDeleting(true);
@@ -86,23 +177,48 @@ export default function KnowledgeView() {
 
   return (
     <main className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
-      <header className="mb-8 flex items-center justify-between">
+      <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold text-zinc-100">Knowledge Base</h1>
           <p className="mt-1 text-sm text-zinc-500">Everything indexed and searchable right now.</p>
         </div>
-        <button
-          onClick={() => {
-            setLoading(true);
-            refresh();
-          }}
-          aria-label="Refresh"
-          className="rounded-lg border border-zinc-800 p-2 text-zinc-500 transition-colors hover:border-zinc-600 hover:text-zinc-200"
-        >
-          <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-        </button>
+        <div className="flex items-center gap-2">
+          <div className="flex rounded-xl border border-zinc-800 bg-zinc-900/50 p-1" role="tablist" aria-label="Knowledge view">
+            <button
+              role="tab"
+              aria-selected={tab === "list"}
+              onClick={() => setTab("list")}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${tab === "list" ? "bg-zinc-800 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"}`}
+            >
+              <List size={13} /> List
+            </button>
+            <button
+              role="tab"
+              aria-selected={tab === "graph"}
+              onClick={() => setTab("graph")}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${tab === "graph" ? "bg-zinc-800 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"}`}
+            >
+              <Waypoints size={13} /> Graph
+            </button>
+          </div>
+          <button
+            onClick={() => {
+              setLoading(true);
+              refresh();
+            }}
+            aria-label="Refresh"
+            className="rounded-lg border border-zinc-800 p-2 text-zinc-500 transition-colors hover:border-zinc-600 hover:text-zinc-200"
+          >
+            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+          </button>
+        </div>
       </header>
 
+      {/* Keep the graph mounted when hidden: preserves sim state + avoids refetch. */}
+      <div className={tab === "graph" ? "mb-8" : "hidden"}>
+        <KnowledgeGraph />
+      </div>
+      <div className={tab === "list" ? undefined : "hidden"}>
       {/* Stat cards */}
       <section className="mb-8 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatCard icon={<FileText size={17} />} value={stats?.total_files ?? "—"} label="Files indexed" />
@@ -135,14 +251,15 @@ export default function KnowledgeView() {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[560px] text-left text-[13px] md:min-w-0">
               <thead>
-                <tr className="text-[10.5px] uppercase tracking-wider text-zinc-600">
-                  <th className="px-5 py-2.5 font-medium">File</th>
-                  <th className="px-4 py-2.5 font-medium">Status</th>
-                  <th className="px-4 py-2.5 font-medium">Chunks</th>
-                  <th className="hidden px-4 py-2.5 font-medium md:table-cell">Model</th>
-                  <th className="hidden px-4 py-2.5 font-medium lg:table-cell">Added</th>
-                  <th className="px-4 py-2.5" />
-                </tr>
+                  <tr className="text-[10.5px] uppercase tracking-wider text-zinc-600">
+                    <th className="px-5 py-2.5 font-medium">File</th>
+                    <th className="px-4 py-2.5 font-medium">Status</th>
+                    <th className="px-4 py-2.5 font-medium">Chunks</th>
+                    <th className="hidden px-4 py-2.5 font-medium md:table-cell">Entities</th>
+                    <th className="hidden px-4 py-2.5 font-medium md:table-cell">Model</th>
+                    <th className="hidden px-4 py-2.5 font-medium lg:table-cell">Added</th>
+                    <th className="px-4 py-2.5" />
+                  </tr>
               </thead>
               <tbody>
                 {files.map((f) => (
@@ -163,6 +280,9 @@ export default function KnowledgeView() {
                       </span>
                     </td>
                     <td className="px-4 py-3 tabular-nums text-zinc-400">{f.total_chunks}</td>
+                    <td className="hidden px-4 py-3 md:table-cell">
+                      <EntityCell file={f} extracting={extractingIds.has(f.id)} onExtract={() => onExtract(f)} />
+                    </td>
                     <td className="hidden max-w-[150px] truncate px-4 py-3 text-xs text-zinc-500 md:table-cell" title={f.embedding_model ?? ""}>
                       {f.embedding_model ?? "—"}
                     </td>
@@ -236,6 +356,7 @@ export default function KnowledgeView() {
           </button>
         </div>
       </Modal>
+      </div>
     </main>
   );
 }

@@ -194,6 +194,10 @@ async def retrieve(query: str, config: ChatConfig) -> list[ChunkOut]:
     mode = config.retrieval_mode
     if mode == "fulltext":
         results = await fulltext_search(query, table, config.top_k)
+    elif mode == "graph":
+        from .graph_rag import graph_search
+
+        results = await graph_search(query, table, config)
     else:
         vectors = await embed_texts([query], config)
         vec = to_pg_vector(vectors[0])

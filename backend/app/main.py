@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 from .config import get_settings
 from .database import close_db, init_db
 from .routers import chat, health, ingest, knowledge, sessions
+from .services.entities import recover_extraction_jobs
 from .utils.auth import require_api_token
 from .utils.logger import get_logger, setup_logging
 from .utils.ratelimit import SlidingWindowLimiter, client_ip
@@ -23,7 +24,13 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     setup_logging(settings.log_level)
     await init_db()
-    log.info("app.started", environment=settings.environment)
+    # Durable extraction queue: restart jobs orphaned by a previous process.
+    try:
+        recovered = await recover_extraction_jobs()
+    except Exception as exc:
+        recovered = 0
+        log.error("app.recovery_failed", error=str(exc))
+    log.info("app.started", environment=settings.environment, recovered_extractions=recovered)
     yield
     await close_db()
     log.info("app.stopped")
@@ -50,6 +57,9 @@ def create_app() -> FastAPI:
     )
 
     limiter = SlidingWindowLimiter(settings.rate_limit_per_minute)
+    graph_limiter = SlidingWindowLimiter(settings.rate_limit_graph_per_minute)
+    # Vector-search GETs bypass the mutation limiter — cap them separately.
+    EXPENSIVE_GETS = {"/api/knowledge/graph"}
 
     @app.middleware("http")
     async def rate_limit(request: Request, call_next):
@@ -58,6 +68,13 @@ def create_app() -> FastAPI:
             if not limiter.allow(client_ip(request)):
                 log.warning("ratelimit.blocked", path=request.url.path)
                 return JSONResponse(status_code=429, content={"detail": "Too many requests — slow down."})
+        elif request.method == "GET" and request.url.path in EXPENSIVE_GETS:
+            if not graph_limiter.allow(client_ip(request)):
+                log.warning("ratelimit.graph_blocked", path=request.url.path)
+                return JSONResponse(
+                    status_code=429,
+                    content={"detail": "Graph endpoint rate limit exceeded — slow down."},
+                )
         return await call_next(request)
 
     @app.middleware("http")

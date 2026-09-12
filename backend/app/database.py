@@ -30,6 +30,10 @@ CORE_DDL = [
         embedding_model VARCHAR(100),
         status VARCHAR(20) DEFAULT 'processing',
         error_message TEXT,
+        entity_status VARCHAR(20) DEFAULT 'skipped',
+        entity_error TEXT,
+        entity_count INTEGER DEFAULT 0,
+        relation_count INTEGER DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
@@ -64,6 +68,76 @@ CORE_DDL = [
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     """,
+    # Phase 3 — entity graph (LLM-extracted at ingest time, opt-in).
+    # entities holds ONE row per unique (normalized name, type): the canonical
+    # node. Every mention links via entity_mentions (chunk-level provenance).
+    """
+    CREATE TABLE IF NOT EXISTS entities (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        normalized VARCHAR(255) NOT NULL,
+        type VARCHAR(32) NOT NULL DEFAULT 'concept',
+        mention_count INTEGER DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (normalized, type)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_entities_normalized ON entities (normalized)",
+    """
+    CREATE TABLE IF NOT EXISTS entity_mentions (
+        id SERIAL PRIMARY KEY,
+        entity_id INTEGER NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+        source_file_id INTEGER REFERENCES uploaded_files(id) ON DELETE CASCADE,
+        chunk_id INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_mentions_entity ON entity_mentions (entity_id)",
+    "CREATE INDEX IF NOT EXISTS idx_mentions_file ON entity_mentions (source_file_id)",
+    """
+    CREATE TABLE IF NOT EXISTS relations (
+        id SERIAL PRIMARY KEY,
+        src_entity_id INTEGER NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+        dst_entity_id INTEGER NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+        label VARCHAR(100) NOT NULL,
+        source_file_id INTEGER REFERENCES uploaded_files(id) ON DELETE CASCADE,
+        chunk_id INTEGER,
+        confidence REAL DEFAULT 0.8,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (src_entity_id, dst_entity_id, label, source_file_id)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_relations_src ON relations (src_entity_id)",
+    "CREATE INDEX IF NOT EXISTS idx_relations_dst ON relations (dst_entity_id)",
+    "CREATE INDEX IF NOT EXISTS idx_relations_file ON relations (source_file_id)",
+    # Durable extraction queue: jobs survive restarts; workers claim them
+    # atomically (safe with WEB_CONCURRENCY > 1). NOTE: no api_key column —
+    # provider keys are never persisted server-side (see SECURITY.md).
+    """
+    CREATE TABLE IF NOT EXISTS extraction_jobs (
+        id SERIAL PRIMARY KEY,
+        file_id INTEGER NOT NULL UNIQUE REFERENCES uploaded_files(id) ON DELETE CASCADE,
+        llm_provider VARCHAR(20) NOT NULL DEFAULT 'local',
+        llm_model VARCHAR(100) NOT NULL DEFAULT 'llama3.2',
+        llm_base_url VARCHAR(500) NOT NULL DEFAULT '',
+        status VARCHAR(20) NOT NULL DEFAULT 'queued',
+        attempts INTEGER NOT NULL DEFAULT 0,
+        error TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_extraction_jobs_status ON extraction_jobs (status)",
+]
+
+
+# Idempotent upgrades for pre-existing databases (CREATE TABLE IF NOT EXISTS
+# won't add columns to tables created by older versions).
+CORE_UPGRADES = [
+    "ALTER TABLE uploaded_files ADD COLUMN IF NOT EXISTS entity_status VARCHAR(20) DEFAULT 'skipped'",
+    "ALTER TABLE uploaded_files ADD COLUMN IF NOT EXISTS entity_error TEXT",
+    "ALTER TABLE uploaded_files ADD COLUMN IF NOT EXISTS entity_count INTEGER DEFAULT 0",
+    "ALTER TABLE uploaded_files ADD COLUMN IF NOT EXISTS relation_count INTEGER DEFAULT 0",
 ]
 
 
@@ -123,6 +197,8 @@ async def init_db() -> None:
     async with _pool.acquire() as conn:
         await conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
         for ddl in CORE_DDL:
+            await conn.execute(ddl)
+        for ddl in CORE_UPGRADES:
             await conn.execute(ddl)
     log.info("database.initialised", environment=settings.environment)
 

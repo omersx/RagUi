@@ -11,6 +11,7 @@ from ..database import ensure_chunk_table, pool
 from ..models.schemas import ChunkOut, ChatConfig
 from ..services.chunker import chunk_document
 from ..services.embedder import embed_texts
+from ..services.entities import enqueue_extraction
 from ..services.file_manager import (
     find_duplicate,
     insert_file_record,
@@ -21,6 +22,7 @@ from ..services.parser import parse_document
 from ..services.retriever import resolve_embedding_dimensions, to_pg_vector
 from ..utils.logger import get_logger
 from ..utils.model_registry import get_chunk_table_name, validate_local_model
+from .knowledge import invalidate_graph_cache
 
 router = APIRouter()
 log = get_logger(__name__)
@@ -41,6 +43,11 @@ async def ingest(
     api_key: str = Form(""),
     ocr_enabled: bool = Form(False),
     max_tokens: int = Form(512),
+    # Phase 3 — opt-in entity extraction (background LLM job, never blocks ingest).
+    extract_entities: bool = Form(False),
+    llm_provider: str = Form("local"),
+    llm_model: str = Form("llama3.2"),
+    llm_base_url: str = Form(""),
 ):
     settings = get_settings()
     started = time.perf_counter()
@@ -141,8 +148,23 @@ async def ingest(
                 )
 
         await update_file_status(file_id, "completed", parsed.raw_markdown, len(chunks))
+        invalidate_graph_cache()
         elapsed = round(time.perf_counter() - started, 2)
         log.info("ingest.completed", file_id=file_id, chunks=len(chunks), seconds=elapsed)
+
+        entity_job: str = "skipped"
+        if extract_entities and chunks:
+            llm_cfg = ChatConfig(
+                llm_provider="api" if llm_provider == "api" else (
+                    "custom" if llm_provider == "custom" else "local"
+                ),
+                llm_model=llm_model or "llama3.2",
+                llm_base_url=llm_base_url or "",
+                api_key=api_key,
+            )
+            queued = await enqueue_extraction(file_id, llm_cfg, table)
+            entity_job = "started" if queued else "skipped"
+            log.info("ingest.entities_queued", file_id=file_id, model=llm_cfg.llm_model)
 
         return {
             "status": "success",
@@ -153,6 +175,7 @@ async def ingest(
             "total_chunks": len(chunks),
             "embedding_model": embedding_model,
             "processing_time_seconds": elapsed,
+            "entity_extraction": entity_job,
         }
     except HTTPException:
         raise

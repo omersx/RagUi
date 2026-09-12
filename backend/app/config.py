@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     api_auth_token: str = ""
     # Per-IP request cap for /api routes (0 disables the limiter)
     rate_limit_per_minute: int = 120
+    # Tighter per-IP cap for the expensive vector-search graph endpoint (0 disables)
+    rate_limit_graph_per_minute: int = 30
+    # Phase-3 extraction worker: max simultaneous files + per-batch LLM retries
+    entity_max_concurrency: int = 2
+    entity_max_retries: int = 3
 
     @property
     def asyncpg_dsn(self) -> str:
