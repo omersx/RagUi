@@ -1,5 +1,5 @@
 # Production image — CPU-only torch, no CUDA binaries
-FROM python:3.12-slim
+FROM python:3.15-slim
 
 WORKDIR /app
 
